@@ -41,7 +41,7 @@ for sample in ${samples[@]}; do
 done
 
 # calculate site depth statistics
-parallel -j $4 "python3 site_depth_stats.py {} > {}.stats" ::: $3/*.depth
+parallel -j $4 "python3 ./site_depth_stats.py {} > {}.stats" ::: $3/*.depth
 
 # iterate over samples in the array
 for sample in ${samples[@]}; do

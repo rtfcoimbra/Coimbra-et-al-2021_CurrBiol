@@ -24,7 +24,7 @@ bams=$(find $2 -name '*.clean.bam' ! -name 'WOAK.clean.bam' -printf '%p ')
 sambamba depth base -t 8 --combined ${bams} | awk 'NR>1 { print $3 }' > $3/giraffe.depth
 
 # calculate site depth statistics
-python site_depth_stats.py $3/giraffe.depth > $3/giraffe.depth.stats
+python3 ./site_depth_stats.py $3/giraffe.depth > $3/giraffe.depth.stats
 
 # create an array of population names
 pops=(WA GNP ZNP SNR ETH MF RET ISC LVNP MA SGR MTNP BNP SUN KKR V23 ENP HNB)
