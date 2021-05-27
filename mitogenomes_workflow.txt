@@ -1,0 +1,216 @@
+# Usage:
+#   Do not run this as a script! Use it as step-by-step workflow.
+#
+# Description:
+#   Subsample raw reads with seqtk, assemble and annotate mitochondrial genomes
+#   with MitoZ, and extract protein coding sequences. Some steps must be performed
+#   manually and/or with the use of independent GUI programs.
+#
+# Requirements:
+#   mitoz
+#   parallel
+#   pigz
+#   seqtk
+
+cd ~/mitogenomes/sub_reads
+
+# randomly subsample 10% of all read pairs
+# obs.: for individuals ISC01, ISC04, KKR08, and SGR05 I subsample 20% of all read pairs
+ls ~/mitogenomes/raw_reads/*.fq.gz | parallel -j 20 'seqtk sample -s 100 {} 0.1 | pigz -p 8 > {/}'
+
+# create an array of read 1 FASTQs to merge
+lane_r1=(*_L*_1.fq.gz)
+
+# iterate over elements in the array
+for ((i=0; i<${#lane_r1[@]}; ++i)); do
+  # output name
+  sample_r1=${lane_r1[i]/_L*_/_}
+  # echo commands to a list
+  echo "zcat ${lane_r1[i]} ${lane_r1[((++i))]} | pigz -p 8 > ${sample_r1}" >> zcat.jobs
+done
+
+# append commands for merging read 2 FASTQs
+cat zcat.jobs | sed 's/_1.fq/_2.fq/g' >> zcat.jobs
+
+# run commands in parallel
+cat zcat.jobs | parallel -j 10
+
+# remove lane-level FASTQs
+lane_reads=(*_L*_*.fq.gz)
+rm ${lane_reads[@]}
+
+###############################################################################
+
+cd ~/mitogenomes/assemblies
+
+# activate conda environment containing MitoZ dependencies
+conda activate mitozEnv
+
+# iterate over read 1 files
+for r1 in ~/mitogenomes/sub_reads/*_1.fq.gz; do
+  # read 2
+  r2=${r1/_1./_2.}
+  # sample name
+  sample=$(basename ${r1%_1.fq.gz})
+  # ZNP01 reads are phred+64 encoded
+  if [[ ${sample} = ZNP01 ]]; then
+    # run MitoZ with '--fastq_quality_shift'
+    MitoZ.py all \
+      --genetic_code 2 \
+      --clade 'Chordata' \
+      --outprefix ${sample} \
+      --thread_number 30 \
+      --fastq1 ${r1} \
+      --fastq2 ${r2} \
+      --fastq_quality_shift \
+      --fastq_read_length 125 \
+      --duplication \
+      --insert_size 500 \
+      --run_mode 2 \
+      --filter_taxa_method 1 \
+      --requiring_taxa 'Cetartiodactyla' \
+      --species_name 'Giraffa camelopardalis' \
+      &> ${sample}.mitoz.log
+  else
+    # set different insert sizes according to library type
+    case ${sample} in
+      MA1)  # Agaba et al. (2016)
+        ins_size=550
+        ;;
+      WA746|ETH1|MF06|RET3|RET6|ISC08|LVNP8-04|KKR08)  # sequenced at BGI
+        ins_size=300
+        ;;
+      *)  # sequenced at Novogene
+        ins_size=350
+        ;;
+    esac
+    # run MitoZ without '--fastq_quality_shift'
+    MitoZ.py all \
+      --genetic_code 2 \
+      --clade 'Chordata' \
+      --outprefix ${sample} \
+      --thread_number 30 \
+      --fastq1 ${r1} \
+      --fastq2 ${r2} \
+      --fastq_read_length 150 \
+      --duplication \
+      --insert_size ${ins_size} \
+      --run_mode 2 \
+      --filter_taxa_method 1 \
+      --requiring_taxa 'Cetartiodactyla' \
+      --species_name 'Giraffa camelopardalis' \
+      &> ${sample}.mitoz.log
+  fi
+  # move output to a new directory to avoid conflict between different runs
+  mkdir ${sample}.mitoz
+  mv tmp ${sample}.{result,mitoz.log} ${sample}.mitoz
+done
+
+# check if any sample is missing any gene
+grep 'Potential missing genes:' *.mitoz/*.result/summary.txt
+
+# append a '\n' to the end of the file
+sed -i -e '$a\' *.mitoz/*.result/*.fasta
+
+# concatenate all mitogenome FASTAs in a single file
+cat $(find *.mitoz/*.result -name '*.fasta' ! -name '*low_abundance*' -printf '%p ') > mitogenomes.fa
+
+# rename FASTA headers
+for sample in *.mitoz/*.result/summary.txt; do
+  seq_id=$(sed -n '/#Seq_id/,/#Seq_id/ p' ${sample} | grep -Po 'C\d+')
+  sample_name=$(echo $(dirname ${sample}) | sed -r 's/([A-Za-z0-9])\.mitoz.*/\1/')
+  sed -i "s/${seq_id}/${sample_name}/g" mitogenomes.fa
+done
+
+###############################################################################
+
+# create directory and copy files to work with protein coding genes (PCGs)
+mkdir mtdna.cds; cp *.mitoz/*.result/*.cds mtdna.cds; cd mtdna.cds
+
+# iterate over '.cds' files
+for pcg in *.cds; do
+  # sample name
+  sample=${pcg%.cds}
+  # change FASTA header
+  sed -ri "s/^>.*;(.*);len=.*/>${sample}.\1/g" ${pcg}
+done
+
+############################# I M P O R T A N T ! ##############################
+# download available PCG sequences from NCBI (JN632645 and JN632674)
+# rename them and upload them to the server
+################################################################################
+
+# iterate over downloaded files
+for id in JN632645 JN632674; do
+  # change FASTA header
+  sed -ri "s/^>.*(${id}).*\[gene=(.*)].*\[protein=.*/>\1.\2/" ${id}.cds
+  # unfold '.cds' FASTAs
+  awk '!/^>/ { printf "%s", $0; n = "\n" } /^>/ { print n $0; n = "" } END { printf "%s", n }' ${id}.cds > ${id}.1.cds
+done
+
+# create an array of mitochondrial PCGs
+pcgs=(CYTB ND6 ND5 ND4 ND4L ND3 COX3 ATP6 ATP8 COX2 COX1 ND2 ND1)
+# iterate over elements in the array
+for pcg in ${pcgs[@]}; do
+  # extract PCG from each sample's '.cds' file, change FASTA header, and append
+  # PCG to a multiple sequence alignment file
+  grep -h -A 1 --no-group-separator "${pcg}\$" *.cds \
+    | sed -r 's/^>(.*)\..*/>\1/' >> ${pcg}.fa
+done
+
+############################# I M P O R T A N T ! ##############################
+# download the PCG alignments, check them by eye, and realign them if necessary
+################################################################################
+
+############################# I M P O R T A N T ! ##############################
+# download mitogenome FASTAs, correct circularity and start position on Geneious
+# align mitogenomes to the NCBI reference and check the alignment by eye
+# remove gaps, edit headers for NCBI submission, and export as a .txt file
+################################################################################
+
+# split multi-sequence FASTA into individual FASTAs
+split -d -l 2 mitogenomes_sequences.txt file
+
+# iterate over individual FASTAs
+for f in file*; do
+  # get sample name from FASTA header
+  # header format:
+  # >SeqN [organism=Genus species subspecies] [isolate=SAMPLE] mitochondrion, complete genome
+  sample=$(grep -Po 'isolate=\K.*\d' ${f})
+  # rename files with sample name and FASTA extension
+  mv ${f} ${sample}.fa;
+done
+
+# iterate over individual FASTAs
+for fasta in *.fa; do
+  # get sample name
+  sample=$(basename ${fasta%.fa})
+  # annotate new FASTAs for NCBI submission
+  MitoZ.py annotate \
+    --genetic_code 2 \
+    --clade 'Chordata' \
+    --outprefix ${fasta%.fa} \
+    --thread_number 8 \
+    --fastafile ${fasta} \
+    &> ${sample}.mitoz.log
+  # move output to a new directory to avoid conflict between different runs
+  mkdir ${sample}.mitoz
+  mv tmp ${sample}.{result,mitoz.log} ${sample}.mitoz
+done
+
+# create a file to facilitate submission of mitogenome annotations to NCBI
+for f in ~/mitoz_annotate/*.mitoz/*.result/summary.txt; do
+  tail -n +6 $f \
+    | grep 'Seq' \
+    | sed 's/^\s*//' \
+    | sed -E 's/\s+/\t/g' \
+    | cut -f 1-3,6-8 \
+    | awk 'OFS="\t" { print $1,$2,$3-1,$4,$5,$6 }' \
+    >> features.txt
+done
+sort -V features.txt > sorted_features.txt
+
+############################# I M P O R T A N T ! ##############################
+# check mitogenome annotations and make corrections if necessary
+# manually reformat file for NCBI submission and export as a .txt file
+################################################################################
