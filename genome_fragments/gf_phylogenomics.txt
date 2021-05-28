@@ -1,0 +1,170 @@
+# Usage:
+#   Do not run this as a script! Use it as step-by-step workflow.
+#
+# Description:
+#   Generate genome fragment (GF) alignments of varying sizes (200 GFs per size)
+#   and perform an approximately unbiased (AU) tree topology test with IQ-TREE
+#   assuming 15 alternative topologies for the relationship among giraffe.
+#   Generate non-overlapping GF alignments of the appropriate size (450 kbp) to
+#   reject all but one topology, infer maximum likelihood GF trees with IQ-TREE,
+#   reconstruct a multispecies coalescent tree with ASTRAL, and analyze quartet
+#   frequencies with DiscoVista.
+#
+# Requirements:
+#   astral
+#   discovista
+#   iqtree
+#   parallel
+#   python3
+#
+# Important:
+#   These scripts must be in the same directory:
+#   'genome_fragments.py'
+#   'check_gfs.py'
+#   'iqtree_parallel.sh'
+#   'iqtree_au_test.sh'
+#   'parse_iqlog.py'
+
+################################################################################
+#                      GF size-dependent AU topology test                      #
+################################################################################
+
+# directory containing input FASTAs
+dir=~/results/fastas
+# FASTAs of giraffe subspecies representatives and okapi
+fastas="-f ${dir}/WA733.clean.concat.fa -f ${dir}/WA808.clean.concat.fa -f ${dir}/GNP01.clean.concat.fa -f ${dir}/SNR2.clean.concat.fa -f ${dir}/ETH2.clean.concat.fa -f ${dir}/MF06.clean.concat.fa -f ${dir}/ISC04.clean.concat.fa -f ${dir}/RETRot2.clean.concat.fa -f ${dir}/SGR05.clean.concat.fa -f ${dir}/SGR14.clean.concat.fa -f ${dir}/KKR08.clean.concat.fa -f ${dir}/V23.clean.concat.fa -f ${dir}/ENP16.clean.concat.fa -f ${dir}/ENP19.clean.concat.fa -f ${dir}/WOAK.clean.concat.fa"
+min=50000  # minimum fragment size
+max=600000  # maximum fragment size
+step=50000  # step of size increase in range of fragment sizes
+n_samples=200  # number of random fragments to sample
+
+# generate random GFs of different sizes
+for size in $(seq ${min} ${step} ${max}); do
+  # append command to a joblist
+  echo "python3 genome_fragments.py ${fastas} -c -n 0.2 -s ${size} -r ${n_samples}" >> genome_fragments.jobs
+done
+# run 'genome_fragments.py' in parallel
+# WARNING: RAM intensive and very slow for large fragment sizes
+cat genome_fragments.jobs | parallel -j 10
+
+# rename GF FASTA headers
+sed -Ei 's/\sScaffold_.*//g' *.fa
+
+# set up a variable for each species containing its representatives
+nor="WA733,WA808,GNP01,SNR2,ETH2,MF06"  # northern giraffe
+ret="ISC04,RETRot2"  # reticulated giraffe
+mas="SGR05,SGR14"  # masai giraffe
+sou="KKR08,V23,ENP16,ENP19"  # southern giraffe
+
+# create file with alternative tree topologies in newick format
+cat <(echo "(((((${nor}),(${ret})),(${mas})),(${sou})),WOAK);")\
+    <(echo "(((((${nor}),(${ret})),(${sou})),(${mas})),WOAK);")\
+    <(echo "(((((${nor}),(${mas})),(${ret})),(${sou})),WOAK);")\
+    <(echo "(((((${nor}),(${mas})),(${sou})),(${ret})),WOAK);")\
+    <(echo "(((((${nor}),(${sou})),(${mas})),(${ret})),WOAK);")\
+    <(echo "(((((${nor}),(${sou})),(${ret})),(${mas})),WOAK);")\
+    <(echo "(((((${mas}),(${sou})),(${nor})),(${ret})),WOAK);")\
+    <(echo "(((((${mas}),(${sou})),(${ret})),(${nor})),WOAK);")\
+    <(echo "(((((${mas}),(${ret})),(${nor})),(${sou})),WOAK);")\
+    <(echo "(((((${mas}),(${ret})),(${sou})),(${nor})),WOAK);")\
+    <(echo "(((((${sou}),(${ret})),(${mas})),(${nor})),WOAK);")\
+    <(echo "(((((${sou}),(${ret})),(${nor})),(${mas})),WOAK);")\
+    <(echo "((((${nor}),(${ret})),((${mas}),(${sou}))),WOAK);")\
+    <(echo "((((${nor}),(${mas})),((${ret}),(${sou}))),WOAK);")\
+    <(echo "((((${nor}),(${sou})),((${mas}),(${ret}))),WOAK);")\
+    > topologies.tree
+
+# for each GF size
+for size in $(seq ${min} ${step} ${max}); do
+  # create GFs directory and move GF FASTAs to it
+  mkdir GFs_${size}bp && mv GF*_${size}bp_*.fa GFs_${size}bp
+  # copy scripts to GF directory
+  cp check_gfs.py iqtree_parallel.sh iqtree_au_test.sh parse_iqlog.py GFs_${size}bp
+  # change into GF directory
+  cd GFs_${size}bp
+  # calculate proportion of N's per sequence per GF and save separate lists of
+  # good and bad GFs (check conditions in 'check_gfs.py' code)
+  for gf in $(ls -v *.fa); do
+    # append command to a joblist
+    echo "sed '/^[^>]/ s/[^N]//gi; /^\s*$/d' ${gf} | python3 check_gfs.py ${gf} ${size} $(grep -c '>' ${gf}) > ${gf/.fa/.percent_n}" >> check_gfs_${size}bp.jobs
+  done
+  # run 'check_gfs.py' in parallel
+  cat check_gfs_${size}bp.jobs | parallel -j 10
+  # change to parent directory
+  cd ..
+done
+
+# perform AU test on each GF of the list of good GFs with IQ-TREE
+for size in $(seq ${min} ${step} ${max}); do
+  # append command to a joblist
+  echo "cd GFs_${size}bp && bash ./iqtree_parallel.sh . 10 ${size}" >> iqtree_parallel.jobs
+done
+# run 'iqtree_parallel.sh' in parallel
+# WARNING: each job will use 10 CPUs
+cat iqtree_parallel.jobs | parallel -j 5
+
+# combine all 'phylo_GFs_*bp.au' files
+cat $(ls -v *.au) | sed -r '2,$s/Fragment\tTopology\tpAU//g; /^\s*$/d' > combined.au
+
+
+################################################################################
+#                         Multispecies coalescent tree                         #
+################################################################################
+
+# BED file of scaffolds >= 1 Mbp (generated with 'process_assembly.sh')
+bed=~/reference_assembly/kordofan_giraffe/kordofan-giraffe_1mb_scaffolds.bed
+# sort BED by scaffold size and split it into new BEDs with up to 10 scaffolds
+cat ${bed} | sort -Vk 3 | split -l 1 -a 3 -d - kordofan-giraffe_1mb_scaffolds.bed.
+# directory containing input FASTAs
+dir=~/results/fastas
+# find input FASTAs (only quality filtered genome FASTAs with <= 20% of N's were considered)
+fastas=$(find ${dir} -name '*.clean.concat.fa' ! -name 'ISC01.clean.concat.fa' ! -name 'LVNP*.clean.concat.fa' -printf '-f %p ')
+# generate non-overlapping GFs of 450 kbp
+ls -v kordofan-giraffe_1mb_scaffolds.bed.* | parallel -j 10 "python3 genome_fragments.py ${fastas} -b {} -c -n 0.2 -s 450000"
+# rename FASTA headers
+sed -Ei 's/\sScaffold_.*//g' *.fa
+
+# calculate proportion of N's per sequence per GF and save separate lists of
+# good and bad GFs (check conditions in 'check_gfs.py' code)
+for gf in $(ls -v *.fa); do
+  # append command to a joblist
+  echo "sed '/^[^>]/ s/[^N]//gi; /^\s*$/d' ${gf} | python3 check_gfs.py ${gf} 450000 $(grep -c '>' ${gf}) > ${gf/.fa/.percent_n}" >> check_gfs_450kb.jobs
+done
+# run 'check_gfs.py' in parallel
+cat check_gfs_450kb.jobs | parallel -j 20
+
+# perform ultrafast model selection followed by tree reconstruction with 1,000 ultrafast bootstrap replicates
+ls -v *.fa | parallel -j 30 "iqtree -s {} -o 'WOAK' -bb 1000"
+# collect gene trees
+cat $(find . -name '*.treefile') > estimated_gene_trees.tree
+
+# infer multispecies coalescent tree from "gene" trees generated with appropriate GF size
+# obs.: do not change the names of the input files!
+java -jar ~/astral/astral.5.6.3.jar \
+  -i estimated_gene_trees.tree \
+  -o estimated_species_tree.tree \
+  2> astral.log
+
+################################################################################
+#                             Quartet frequencies                              #
+################################################################################
+
+# create annotation file for DiscoVista
+find ${dir} -type f -name 'WA*.fa' -execdir sh -c 'printf "%s\tWest_African\n" "$(basename ${0%.clean.concat.fa})"' {} ';' >> annotation.txt
+find ${dir} -type f \( -name 'GNP*.fa' -o -name 'SNR*.fa' -o -name 'ZNP*.fa' \) -execdir sh -c 'printf "%s\tKordofan\n" "$(basename ${0%.clean.concat.fa})"' {} ';' >> annotation.txt
+find ${dir} -type f \( -name 'ETH*.fa' -o -name 'MF*.fa' \) -execdir sh -c 'printf "%s\tNubian\n" "$(basename ${0%.clean.concat.fa})"' {} ';' >> annotation.txt
+find ${dir} -type f \( -name 'ISC*.fa' -o -name 'RET*.fa' \) ! -name 'ISC01*' -execdir sh -c 'printf "%s\tReticulated\n" "$(basename ${0%.clean.concat.fa})"' {} ';' >> annotation.txt
+find ${dir} -type f \( -name 'MA*.fa' -o -name 'SGR*.fa' \) -execdir sh -c 'printf "%s\tMasai\n" "$(basename ${0%.clean.concat.fa})"' {} ';' >> annotation.txt
+find ${dir} -type f \( -name 'BNP*.fa' -o -name 'KKR*.fa' -o -name 'MTNP*.fa' -o -name 'SUN*.fa' -o -name 'V23*.fa' -o -name 'ENP*.fa' -o -name 'HNB*.fa' \) -execdir sh -c 'printf "%s\tSouthern\n" "$(basename ${0%.clean.concat.fa})"' {} ';' >> annotation.txt
+echo -e "WOAK\tOutgroup" >> annotation.txt
+
+# download 'annotation.txt', 'estimated_species_tree.tree', and
+# 'estimated_gene_trees.tree' to local machine
+
+# calculate relative topology frequency analysis around focal branches
+docker run -v $(pwd):/data esayyari/discovista discoVista.py \
+  -a annotation.txt \
+  -m 5 \
+  -p . \
+  -o relative_freq \
+  -g Outgroup
