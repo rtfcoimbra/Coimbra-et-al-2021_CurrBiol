@@ -3,10 +3,13 @@
 #
 # Description:
 #   Subsample raw reads with seqtk, assemble and annotate mitochondrial genomes
-#   with MitoZ, and extract protein coding sequences. Some steps must be performed
-#   manually and/or with the use of independent GUI programs.
+#   with MitoZ, and extract protein coding sequences, and construct maximum
+#   likelihood phylogeny based on protein coding sequences with IQ-TREE. Some
+#   steps must be performed manually and/or with the use of independent GUI
+#   programs.
 #
 # Requirements:
+#   iqtree
 #   mitoz
 #   parallel
 #   pigz
@@ -161,6 +164,27 @@ done
 ############################# I M P O R T A N T ! ##############################
 # download the PCG alignments, check them by eye, and realign them if necessary
 ################################################################################
+
+# create a nexus file with PCG alignment partitions named 'partitions.nex'
+echo "#nexus
+begin sets;
+    charset part1 = ATP6.fa: CODON2, *;
+    charset part2 = ATP8.fa: CODON2, *;
+    charset part3 = COX1.fa: CODON2, *;
+    charset part4 = COX2.fa: CODON2, *;
+    charset part5 = COX3.fa: CODON2, *;
+    charset part6 = CYTB.fa: CODON2, *;
+    charset part7 = ND1.fa: CODON2, *;
+    charset part8 = ND2.fa: CODON2, *;
+    charset part9 = ND3.fa: CODON2, *;
+    charset part10 = ND4.fa: CODON2, *;
+    charset part11 = ND4L.fa: CODON2, *;
+    charset part12 = ND5.fa: CODON2, *;
+    charset part13 = ND6.fa: CODON2, *;
+end;"
+
+# infer maximum likelihood phylogeny based on protein coding sequences
+iqtree -nt 6 -o JN632674 -spp partitions.nex -bb 1000
 
 ############################# I M P O R T A N T ! ##############################
 # download mitogenome FASTAs, correct circularity and start position on Geneious
