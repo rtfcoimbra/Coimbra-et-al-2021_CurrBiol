@@ -29,7 +29,7 @@ Code used to analyze whole-genome sequencing data of giraffe in [Coimbra *et al.
 ### SNP calling and linkage pruning
 
 - `snp_calling.sh` and `site_depth_stats.py`: calculate the global site depth for multiple giraffe BAMs with [sambamba](https://github.com/biod/sambamba), compute summary statistics from the global site depth distribution (i.e. 5th and 95th percentiles, median, and median absolute deviation) with Python (NumPy and SciPy), and estimate genotype likelihoods with [ANGSD](https://github.com/ANGSD/angsd).
-- `ld_pruning.sh`: calculate pairwise linkage disequilibrium with [ngsLD](https://github.com/fgvieira/ngsLD), plot LD decay curve with `fit_LDdecay.R`, prune linked sites with `prune_graph.pl`, and extract unlinked sites from ANGSD's genotype likelihoods file.
+- `ld_pruning.sh`: calculate pairwise linkage disequilibrium with [ngsLD](https://github.com/fgvieira/ngsLD), plot LD decay curve with [fit_LDdecay.R](https://github.com/fgvieira/ngsLD/blob/master/scripts/fit_LDdecay.R), prune linked sites with [prune_graph.pl](https://github.com/fgvieira/ngsLD/blob/master/scripts/prune_graph.pl), and extract unlinked sites from ANGSD's genotype likelihoods file.
 
 ### Population structure and admixture analyses
 
