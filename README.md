@@ -60,7 +60,7 @@ The scripts for phylogenomic analyses with genome fragments presented here were 
 
 ### Assembly and phylogeny of mitochondrial genomes
 
-- `mitogenomes_workflow.txt`: subsample raw reads with [seqtk](https://github.com/lh3/seqtk), assemble and annotate mitochondrial genomes with [MitoZ](https://github.com/linzhi2013/MitoZ/tree/master/version_2.3), and extract protein coding sequences. **Note:** some steps must be performed manually and/or with the use of independent GUI programs.
+- `mitogenomes_workflow.txt`: subsample raw reads with [seqtk](https://github.com/lh3/seqtk), assemble and annotate mitochondrial genomes with [MitoZ](https://github.com/linzhi2013/MitoZ/tree/master/version_2.3), extract protein coding sequences, and construct maximum likelihood phylogeny based on protein coding sequences with [IQ-TREE](http://www.iqtree.org/). **Note:** some steps must be performed manually and/or with the use of independent GUI programs.
 - `plot_mtdna_tree.R`: plot maximum likelihood mitochondrial tree with [ggtree](https://guangchuangyu.github.io/software/ggtree/).
 
 ### Demographic reconstruction
