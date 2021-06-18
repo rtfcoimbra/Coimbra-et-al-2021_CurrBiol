@@ -74,6 +74,6 @@ The scripts for phylogenomic analyses with genome fragments presented here were 
 
 ### ROH and Inbreeding
 
-- `genotype_calling`: call genotypes with [bcftools](https://samtools.github.io/bcftools/) using the SNPs called with ANGSD and convert BCF to Oxford GEN format.
-- `estimate_roh`: identify runs of homozygosity (ROH) and estimate realized inbreeding coefficients (F<sub>ROH</sub>) with [RZooRoH](https://doi.org/10.1111/2041-210X.13167).
+- `genotype_calling.sh`: call genotypes with [bcftools](https://samtools.github.io/bcftools/) using the SNPs called with ANGSD and convert BCF to Oxford GEN format.
+- `estimate_roh.R`: identify runs of homozygosity (ROH) and estimate realized inbreeding coefficients (F<sub>ROH</sub>) with [RZooRoH](https://doi.org/10.1111/2041-210X.13167).
 - `plot_froh.R`: plot F<sub>ROH</sub> and the number vs. the accumulated length of ROH with [tidyverse](https://www.tidyverse.org/) and [patchwork](https://patchwork.data-imaginist.com/).
