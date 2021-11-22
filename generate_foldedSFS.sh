@@ -4,7 +4,7 @@
 #   generate_foldedSFS.sh <ref.fa> <indir_bam> <indir_depth> <outdir> <njobs>
 #
 # Description:
-#   Generate the folded site frequency espectrum per sample with ANGSD.
+#   Generate the folded site frequency spectrum per sample with ANGSD.
 #
 # Requirements:
 #   angsd (incl. the realSFS companion program)
