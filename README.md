@@ -2,7 +2,7 @@
 
 Code used to analyze whole-genome sequencing data of giraffe in [Coimbra *et al.* (2021)](https://doi.org/10.1016/j.cub.2021.04.033):
 
-- Coimbra RTF, Winter S, Kumar V, Koepfli K-P, Gooley RM, Dobrynin P, Fennessy J, Janke A (2021) Whole-genome analysis of giraffe supports four distinct species. *Current Biology*, in press. https://doi.org/10.1016/j.cub.2021.04.033
+- Coimbra RTF, Winter S, Kumar V, Koepfli K-P, Gooley RM, Dobrynin P, Fennessy J, Janke A (2021) Whole-genome analysis of giraffe supports four distinct species. *Current Biology*, 31(13):P2929-2938.E5. https://doi.org/10.1016/j.cub.2021.04.033
 
 **Note:** The scripts used to generate plots do not necessarily reproduce the figures exactly as shown in the paper. In many cases, I used a free image editing software, namely [Krita](https://krita.org/en/), to assemble independent plots and add or correct plot annotations. I tried to use code as much as I could for reproducibility, but my skills are still not quite in the level of coding everything.
 
