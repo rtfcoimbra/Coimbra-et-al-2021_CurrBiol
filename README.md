@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/369277580.svg)](https://zenodo.org/badge/latestdoi/369277580)
+
 # Code from: Whole-genome analysis of giraffe supports four distinct species
 
 Code used to analyze whole-genome sequencing data of giraffe in [Coimbra *et al.* (2021)](https://doi.org/10.1016/j.cub.2021.04.033):
