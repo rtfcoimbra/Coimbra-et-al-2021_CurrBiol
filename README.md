@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/369277580.svg)](https://zenodo.org/badge/latestdoi/369277580)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8367893.svg)](https://doi.org/10.5281/zenodo.8367893)
 
 # Code from: Whole-genome analysis of giraffe supports four distinct species
 
